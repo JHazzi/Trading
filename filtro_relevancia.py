@@ -1,64 +1,77 @@
 import sqlite3
-import re
+import torch
+from transformers import pipeline
 
 DB_PATH = "data/market_data.db"
+BATCH_SIZE = 16  # Ajustable según tu VRAM libre
 
-# 1. Diccionarios Regex
-# Criba rápida: Listicles, clickbait, análisis de baja calidad
-BASURA_REGEX = re.compile(
-    r"(?i)(\b\d+\s+stocks?\s+to\s+buy\b|reasons\s+why|things\s+to\s+know|what\s+to\s+watch|stock\s+advisor|zacks\s+rank|motley\s+fool|should\s+you\s+invest|is\s+it\s+too\s+late|dividend\s+yield|buy\s+alert)"
+# 1. Configuración de Aceleración de Hardware
+device_id = 0 if torch.cuda.is_available() else -1
+if device_id == 0:
+    print(f"[*] GPU detectada para Zero-Shot: {torch.cuda.get_device_name(0)}")
+
+# 2. Carga del Modelo Zero-Shot (BART Large MNLI)
+print("[*] Cargando modelo semántico BART-Large-MNLI...")
+clasificador = pipeline(
+    "zero-shot-classification", 
+    model="facebook/bart-large-mnli", 
+    device=device_id
 )
 
-# Eventos estructurales: Tienen implicaciones directas en el valor
-ALTO_IMPACTO_REGEX = re.compile(
-    r"(?i)(acquire|acquisition|merger|buyout|earnings|guidance|sec\s+filing|lawsuit|sues|investigation|fda\s+approval|bankruptcy|spins\s+off|resigns|layoffs)"
-)
-
-def evaluar_relevancia_texto(titulo: str, resumen: str) -> float:
-    """
-    Asigna un valor continuo [0, 1] de importancia basado en el contenido.
-    """
-    texto_completo = f"{titulo} {resumen}"
-    
-    # Si contiene lenguaje amarillista o de listado, importancia nula
-    if BASURA_REGEX.search(texto_completo):
-        return 0.0
-        
-    # Si contiene eventos corporativos reales, alta importancia
-    if ALTO_IMPACTO_REGEX.search(texto_completo):
-        return 0.9
-        
-    # Si no cae en los extremos, es una noticia normal de ecosistema (Ruido de fondo válido)
-    return 0.5
-
-def procesar_relevancia() -> int:
-    """
-    Busca noticias sin puntuar y actualiza su nivel de importancia.
-    """
+def procesar_relevancia():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
-    # Buscar solo noticias que no han sido pasadas por este filtro
-    cursor.execute("SELECT id, titulo, resumen FROM noticias WHERE importancia IS NULL")
+    # Buscamos noticias sin evaluar, o las que fueron evaluadas por el viejo sistema Regex (distintas de 1.0 que es la SEC pura)
+    cursor.execute("""
+        SELECT id, titulo, resumen 
+        FROM noticias 
+        WHERE importancia IS NULL OR importancia != 1.0
+    """)
     filas = cursor.fetchall()
     
     if not filas:
+        print("[!] No hay noticias pendientes de evaluar.")
         conn.close()
         return 0
         
-    actualizaciones = []
-    for id_noticia, titulo, resumen in filas:
-        # Prevención de Nulos por si el scraper falló
-        res_limpio = resumen if resumen else "" 
-        importancia = evaluar_relevancia_texto(titulo, res_limpio)
-        actualizaciones.append((importancia, id_noticia))
-        
-    cursor.executemany("UPDATE noticias SET importancia = ? WHERE id = ?", actualizaciones)
-    conn.commit()
-    conn.close()
+    print(f"[*] Evaluando semántica profunda para {len(filas)} noticias...")
     
+    actualizaciones = []
+    
+    # Procesamiento en Lotes (Batches) para saturar los Tensor Cores de la GPU
+    for i in range(0, len(filas), BATCH_SIZE):
+        batch = filas[i : i + BATCH_SIZE]
+        ids = [f[0] for f in batch]
+        
+        # Fusionamos título y resumen (con un fallback seguro si resumen es None)
+        textos = [f"{f[1]}. {f[2] if f[2] else ''}" for f in batch]
+        
+        try:
+            # multi_label=True fuerza al modelo a devolver una probabilidad de 0 a 1 independiente para esta etiqueta
+            resultados = clasificador(
+                textos, 
+                candidate_labels=["critical market moving corporate event"],
+                multi_label=True
+            )
+            
+            for idx, res in enumerate(resultados):
+                # Extraemos el score matemático de la etiqueta
+                score = round(res['scores'][0], 4)
+                actualizaciones.append((score, ids[idx]))
+                
+        except Exception as e:
+            print(f"[!] Error procesando batch de textos: {e}")
+            continue
+            
+    # Actualización masiva en SQLite
+    if actualizaciones:
+        cursor.executemany("UPDATE noticias SET importancia = ? WHERE id = ?", actualizaciones)
+        conn.commit()
+        
+    conn.close()
     return len(actualizaciones)
 
 if __name__ == "__main__":
     procesadas = procesar_relevancia()
-    print(f"[+] Relevancia evaluada para {procesadas} noticias en la base de datos.")
+    print(f"[+] Relevancia asignada matemáticamente para {procesadas} noticias.")

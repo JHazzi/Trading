@@ -15,8 +15,8 @@ def cargar_grafo_mercado() -> nx.DiGraph:
     nodos = [fila[0] for fila in cursor.fetchall()]
     G.add_nodes_from(nodos)
     
-    # Cargar Aristas (Relaciones con pesos)
-    cursor.execute("SELECT origen, destino, peso FROM relaciones_grafo")
+    # Cargar Aristas (Relaciones con pesos) - CORREGIDO
+    cursor.execute("SELECT origen, destino, peso FROM relaciones_organicas")
     aristas = cursor.fetchall()
     for origen, destino, peso in aristas:
         G.add_edge(origen, destino, weight=peso)
@@ -52,7 +52,8 @@ if __name__ == "__main__":
     # Prueba de concepto aislada
     grafo = cargar_grafo_mercado()
     print("[*] Grafo cargado en memoria.")
-    print(f"Nodos: {grafo.nodes()}")
+    print(f"Nodos: {grafo.number_of_nodes()}")
+    print(f"Aristas: {grafo.number_of_edges()}")
     
     # Simulamos una noticia de Grado 1 sobre NVIDIA muy positiva
     ticker_noticia = "NVDA"
@@ -62,7 +63,10 @@ if __name__ == "__main__":
     
     contagios = calcular_shock_contagio(ticker_noticia, sentimiento_noticia, grafo)
     
-    print("\n[*] Propagación calculada:")
-    for afectado, impacto in contagios.items():
-        direccion = "Positivo" if impacto > 0 else "Negativo"
-        print(f"    -> {afectado}: Recibe un impacto {direccion} de {impacto}")
+    if contagios:
+        print("\n[*] Propagación calculada:")
+        for afectado, impacto in contagios.items():
+            direccion = "Positivo" if impacto > 0 else "Negativo"
+            print(f"    -> {afectado}: Recibe un impacto {direccion} de {impacto}")
+    else:
+        print("\n[*] Sin contagios calculados (Grafo sin aristas para este nodo).")

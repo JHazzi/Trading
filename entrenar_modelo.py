@@ -20,7 +20,7 @@ def cargar_dataset_entrenamiento():
     # Unimos la tabla de correlaciones con los vectores técnicos
     query = """
         SELECT 
-            c.importancia, 
+            c.fiabilidad_fuente AS importancia, 
             c.sentimiento, 
             c.es_contagio,
             v.rsi, 
@@ -29,10 +29,11 @@ def cargar_dataset_entrenamiento():
             c.impacto_mfe_60m_pct
         FROM correlaciones c
         JOIN vectores_estado v ON c.id_noticia = v.id_noticia AND c.ticker = v.ticker
-        WHERE c.importancia > 0.0
+        WHERE c.fiabilidad_fuente > 0.0
     """
     
     df = pd.read_sql_query(query, conn)
+    print(df)
     conn.close()
     
     # Limpieza de datos espurios o nulos que puedan romper la matemática
@@ -43,7 +44,6 @@ def cargar_dataset_entrenamiento():
 
 def entrenar_cerebro_hibrido():
     df = cargar_dataset_entrenamiento()
-    
     if df.empty or len(df) < 50:
         print("[!] No hay suficientes datos para entrenar. El bot necesita recolectar más historia (mínimo 50 eventos).")
         return
