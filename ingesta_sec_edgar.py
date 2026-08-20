@@ -3,86 +3,124 @@ import requests
 import time
 from datetime import datetime
 import hashlib
+import re
+from bs4 import BeautifulSoup
 
 DB_PATH = "data/market_data.db"
-
-# REQUISITO LEGAL DE LA SEC: Debes declarar tu nombre o app y un email de contacto en el User-Agent.
-# Esto evita que baneen tu IP (Límite oficial: 10 peticiones por segundo).
 HEADERS = {
-    "User-Agent": "QuantMarketBot joaquin@example.com" # Puedes cambiar el email por el tuyo
+    "User-Agent": "QuantMarketBot joaquin@example.com" # Cambia esto por tu email
 }
 
 def obtener_mapeo_cik():
-    """Descarga el mapeo oficial de Tickers a CIK de la SEC."""
     print("[*] Obteniendo diccionario de Tickers -> CIK desde la SEC...")
     url = "https://www.sec.gov/files/company_tickers.json"
-    
     respuesta = requests.get(url, headers=HEADERS)
     respuesta.raise_for_status()
-    datos = respuesta.json()
-    
     mapeo = {}
-    for idx, info in datos.items():
-        # El CIK debe ser un string de exactamente 10 dígitos (rellenado con ceros a la izquierda)
+    for idx, info in respuesta.json().items():
         mapeo[info['ticker']] = str(info['cik_str']).zfill(10)
     return mapeo
 
+def limpiar_html_sec(html_content):
+    """Filtra el ruido legal/visual y extrae el texto corporativo puro saltando la portada."""
+    soup = BeautifulSoup(html_content, 'html.parser')
+    
+    # 1. Destruimos las tablas financieras, scripts y estilos
+    for element in soup(["table", "style", "script", "meta", "noscript", "header", "footer"]):
+        element.decompose()
+        
+    # 2. Extraemos el texto y limpiamos espacios múltiples
+    texto = soup.get_text(separator=' ')
+    texto_limpio = re.sub(r'\s+', ' ', texto).strip()
+    
+    # 3. CAZA DE LA NOTICIA REAL (Regex)
+    # Buscamos el patrón "Item X.XX" (ej. Item 1.01 o ITEM 8.01) que marca el inicio de la noticia
+    match = re.search(r'Item\s+\d\.\d{2}', texto_limpio, flags=re.IGNORECASE)
+    
+    if match:
+        # Si encuentra el Item, cortamos la portada y tomamos los siguientes 2000 caracteres
+        inicio = match.start()
+        resumen_real = texto_limpio[inicio : inicio + 2000]
+    else:
+        # Fallback: Si el formato es raro, nos saltamos los primeros 1500 caracteres a ciegas
+        resumen_real = texto_limpio[1500 : 3500]
+        
+    # Limpiamos un poco más el resumen final
+    resumen_real = re.sub(r'\s+', ' ', resumen_real).strip() + "..."
+    
+    return texto_limpio, resumen_real
+
 def descargar_historial_8k(ticker, cik, conn):
-    """Descarga el historial de Formularios 8-K (Eventos Críticos) para un CIK específico."""
-    url = f"https://data.sec.gov/submissions/CIK{cik}.json"
+    url_meta = f"https://data.sec.gov/submissions/CIK{cik}.json"
     
     try:
-        respuesta = requests.get(url, headers=HEADERS)
+        respuesta = requests.get(url_meta, headers=HEADERS)
         if respuesta.status_code != 200:
             return 0
             
-        datos = respuesta.json()
-        filings = datos.get("filings", {}).get("recent", {})
+        filings = respuesta.json().get("filings", {}).get("recent", {})
+        if not filings: return 0
         
-        if not filings:
-            return 0
-            
         formularios = filings.get("form", [])
-        fechas_aceptacion = filings.get("acceptanceDateTime", [])
+        fechas = filings.get("acceptanceDateTime", [])
         descripciones = filings.get("primaryDocDescription", [])
+        accession_numbers = filings.get("accessionNumber", [])
+        primary_docs = filings.get("primaryDocument", [])
         
         nuevos_registros = 0
         cursor = conn.cursor()
         
         for i in range(len(formularios)):
-            # Solo nos interesan los Formularios 8-K (Eventos materiales de impacto inmediato)
             if formularios[i] == "8-K":
-                dt_str = fechas_aceptacion[i]
-                if not dt_str: continue
+                dt_str = fechas[i]
+                acc_num = accession_numbers[i]
+                doc_file = primary_docs[i]
                 
-                try:
-                    # El formato de la SEC es '2023-10-25T16:02:23.000Z'. Este es nuestro T0 absoluto.
-                    dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
-                except ValueError:
+                if not dt_str or not acc_num or not doc_file: 
                     continue
                     
-                titulo = f"SEC Form 8-K: {descripciones[i] if descripciones[i] else 'Reporte Corporativo Oficial'}"
-                resumen = "Reporte 8-K (SEC EDGAR). Evento corporativo no programado de importancia crítica. Fuente primaria verificada."
+                # La SEC exige quitar los ceros a la izquierda del CIK y los guiones del accessionNumber para los archivos
+                cik_archivo = str(int(cik))
+                acc_num_limpio = acc_num.replace("-", "")
+                url_documento = f"https://www.sec.gov/Archives/edgar/data/{cik_archivo}/{acc_num_limpio}/{doc_file}"
                 
+                try:
+                    dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+                    
+                    # --- DEEP SCRAPING ---
+                    # Hacemos una pausa para respetar el límite de la API
+                    time.sleep(0.01) 
+                    doc_resp = requests.get(url_documento, headers=HEADERS)
+                    
+                    if doc_resp.status_code == 200:
+                        texto_completo, resumen = limpiar_html_sec(doc_resp.text)
+                        print(f"      [+] {ticker} | {dt.date()} | Éxito: {len(texto_completo)} chars totales. Resumen: {resumen[:1000]}...")
+                    else:
+                        print(f"      [-] {ticker} | Error 404 al intentar descargar el documento físico.")
+                        continue
+                        
+                except Exception as e:
+                    print(f"      [!] Error procesando archivo de {ticker}: {e}")
+                    continue
+                    
+                titulo = f"SEC Form 8-K: {descripciones[i] if descripciones[i] else 'Reporte Corporativo'}"
                 string_id = f"SEC_8K_{ticker}_{dt.isoformat()}"
                 id_noticia = hashlib.md5(string_id.encode()).hexdigest()
                 
                 try:
-                    # Inyectamos en la tabla de noticias.
-                    # Asignamos importancia = 1.0 porque es Ground Truth (evita pasar por el filtro Regex).
                     cursor.execute('''
                         INSERT INTO noticias (id, ticker, timestamp, titulo, fuente, resumen, importancia)
                         VALUES (?, ?, ?, ?, ?, ?, ?)
                     ''', (id_noticia, ticker, dt.isoformat(), titulo, "SEC EDGAR", resumen, 1.0))
                     nuevos_registros += 1
                 except sqlite3.IntegrityError:
-                    pass # Evita duplicados si corres el script varias veces
+                    pass 
                     
         conn.commit()
         return nuevos_registros
         
     except Exception as e:
-        print(f"    [!] Error de red al procesar {ticker} (CIK: {cik}): {e}")
+        print(f"    [!] Error de red al procesar metadatos de {ticker}: {e}")
         return 0
 
 def ingesta_masiva_sec():
@@ -90,32 +128,27 @@ def ingesta_masiva_sec():
     cursor = conn.cursor()
     
     cursor.execute("SELECT ticker FROM universo_tickers WHERE activo = 1")
-    tickers_activos = [fila[0] for fila in cursor.fetchall()]
+    tickers = [fila[0] for fila in cursor.fetchall()]
     
-    if not tickers_activos:
-        print("[!] El universo de tickers está vacío. Corre init_db.py y carga tu universo.")
-        conn.close()
+    if not tickers:
+        print("[!] Universo vacío.")
         return
         
     mapeo_cik = obtener_mapeo_cik()
-    print(f"[*] Iniciando extracción de Ground Truth (SEC 8-K) para {len(tickers_activos)} activos...")
+    print(f"[*] Iniciando Deep Scraping (SEC 8-K) para {len(tickers)} activos...")
+    print(f"[*] Esto tomará tiempo debido a la descarga y parseo de HTMLs en crudo...\n")
     
-    total_8k = 0
-    for ticker in tickers_activos:
+    total = 0
+    for ticker in tickers:
         cik = mapeo_cik.get(ticker)
-        if not cik:
-            print(f"    [-] Saltando {ticker}: No se encontró CIK oficial.")
-            continue
+        if not cik: continue
             
-        # Throttling de seguridad para respetar el límite de 10 peticiones/seg de la SEC
-        time.sleep(0.15) 
-        
+        time.sleep(0.01)
+        print(f"  -> Rastreando {ticker}...")
         registros = descargar_historial_8k(ticker, cik, conn)
-        total_8k += registros
-        if registros > 0:
-            print(f"    [+] {ticker}: {registros} eventos 8-K indexados con T0 exacto.")
+        total += registros
             
-    print(f"\n[*] Extracción completada. Se añadieron {total_8k} eventos oficiales inmutables.")
+    print(f"\n[*] Extracción profunda completada. Se inyectaron {total} documentos con texto real.")
     conn.close()
 
 if __name__ == "__main__":
