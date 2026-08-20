@@ -18,5 +18,9 @@ python daemon_paper_trading.py > data/trading.log 2>&1 &
 PID_TRADING=$!
 echo "Daemon Paper Trading iniciado con PID: $PID_TRADING"
 
+python daemon_macro.py > data/macro.log 2>&1 &
+PID_MACRO=$!
+echo "Daemon Macro iniciado con PID: $PID_MACRO"
+
 echo "[+] Daemons iniciados con PIDs: Precios($PID_PRECIOS), Noticias($PID_NOTICIAS), Cerebro($PID_CEREBRO)"
 echo "[*] Usa 'tail -f data/*.log' para ver la actividad en tiempo real."
