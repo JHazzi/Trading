@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Quant Market Bot - Terminal</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/main.css">
+    <script src="js/api.js"></script>
+    <script src="js/modulos/tecnico.js"></script>
+    <script src="js/modulos/topologia.js"></script>
+    <script src="js/modulos/nlp_feed.js"></script>
+    <script src="js/app.js"></script>
+    <style>
+        :root { --bg-dark: #0B0E14; --panel-bg: #151922; --border: #2B303B; --text-main: #E2E8F0; --text-muted: #64748B; --accent: #3B82F6; }
+        body { margin: 0; background: var(--bg-dark); color: var(--text-main); font-family: 'Inter', sans-serif; display: flex; height: 100vh; overflow: hidden; }
+        
+        /* --- Sidebar --- */
+        aside { width: 220px; background: var(--panel-bg); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+        .logo { padding: 20px; font-weight: 800; font-size: 18px; border-bottom: 1px solid var(--border); letter-spacing: -0.5px; }
+        .nav-btn { background: none; border: none; color: var(--text-muted); padding: 15px 20px; text-align: left; font-size: 14px; cursor: pointer; font-family: inherit; transition: 0.2s; border-left: 3px solid transparent; }
+        .nav-btn:hover { color: var(--text-main); background: rgba(255,255,255,0.02); }
+        .nav-btn.active { color: var(--accent); border-left-color: var(--accent); background: rgba(59, 130, 246, 0.1); font-weight: 600; }
+        
+        /* --- Contenido Principal --- */
+        main { flex-grow: 1; display: flex; flex-direction: column; background: var(--bg-dark); }
+        .topbar { height: 60px; border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 20px; gap: 30px; background: var(--panel-bg); }
+        .stat { display: flex; flex-direction: column; }
+        .stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat-value { font-size: 15px; font-weight: 600; }
+        
+        .tab-content { display: none; padding: 20px; height: calc(100vh - 100px); box-sizing: border-box; overflow-y: auto; }
+        .tab-content.active { display: flex; flex-direction: column; gap: 20px; }
+        
+        /* --- Paneles Internos --- */
+        .panel { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 6px; padding: 15px; display: flex; flex-direction: column; }
+        .panel-header { margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid var(--border); font-size: 14px; font-weight: 600; display: flex; justify-content: space-between;}
+        
+        /* --- Controles UI --- */
+        select { background: var(--bg-dark); color: var(--text-main); border: 1px solid var(--border); padding: 5px 10px; border-radius: 4px; font-family: inherit; outline: none;}
+        
+        /* Contenedores de Gráficos */
+        .chart-container { flex-grow: 1; min-height: 400px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { text-align: left; padding: 10px; border-bottom: 1px solid var(--border); }
+        th { color: var(--text-muted); font-weight: 400; text-transform: uppercase; font-size: 11px; }
+    </style>
+</head>
+<body>
+
+    <!-- SIDEBAR -->
+    <aside>
+        <div class="logo">QUANT TERMINAL</div>
+        <button class="nav-btn active" onclick="switchTab('tab-overview')">Resumen Macro</button>
+        <button class="nav-btn" onclick="switchTab('tab-noticias')">Laboratorio NLP</button>
+        <button class="nav-btn" onclick="switchTab('tab-grafo')">Topología de Grafo</button>
+        <button class="nav-btn" onclick="switchTab('tab-analisis')">Análisis y Trading</button>
+    </aside>
+
+    <main>
+        <!-- TOPBAR: Métricas Globales -->
+        <div class="topbar">
+            <div class="stat"><span class="stat-label">Noticias Procesadas</span><span class="stat-value" id="hdr-noticias">--</span></div>
+            <div class="stat"><span class="stat-label">Aristas Semánticas</span><span class="stat-value" id="hdr-aristas">--</span></div>
+            <div class="stat"><span class="stat-label">Operaciones (Paper)</span><span class="stat-value" id="hdr-trades">--</span></div>
+        </div>
+
+        <!-- TAB 1: OVERVIEW -->
+        <div id="tab-overview" class="tab-content active">
+            <div class="panel" style="flex-grow: 1;">
+                <div class="panel-header">Curva de Rendimiento (Equity Curve)</div>
+                <div class="chart-container" id="chart-equity"></div>
+            </div>
+        </div>
+
+        <!-- TAB 2: NOTICIAS (NLP) -->
+        <div id="tab-noticias" class="tab-content">
+            <div class="panel" style="flex-grow: 1; overflow-y: auto;">
+                <div class="panel-header">Flujo de Eventos Procesados (Zero-Shot & FinBERT)</div>
+                <table>
+                    <thead><tr><th>Fecha</th><th>Ticker</th><th>Título / Resumen</th><th>Sentimiento</th><th>Importancia</th></tr></thead>
+                    <tbody id="tabla-noticias">
+                        <!-- JS Inyectará las noticias aquí -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- TAB 3: GRAFO -->
+        <div id="tab-grafo" class="tab-content">
+            <div class="panel" style="flex-grow: 1;">
+                <div class="panel-header">Red Neuronal de Relaciones Corporativas</div>
+                <div class="chart-container" id="chart-network"></div>
+            </div>
+        </div>
+
+        <!-- TAB 4: ANÁLISIS TÉCNICO Y TRADING -->
+        <div id="tab-analisis" class="tab-content">
+            <div class="panel" style="flex-grow: 1;">
+                <div class="panel-header">
+                    <span>Acción del Precio y Señales</span>
+                    <select id="select-ticker" onclick="poblarTickers()" onchange="cargarGraficoVelas()">
+                    </select>
+                </div>
+                <div class="chart-container" id="chart-velas"></div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const API_URL = "http://localhost:8000/api";
+
+        // Lógica de Pestañas
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            
+            document.getElementById(tabId).classList.add('active');
+            event.currentTarget.classList.add('active');
+
+            // Renderizar gráficos si la pestaña lo requiere
+            if(tabId === 'tab-grafo' && !window.grafoCargado) { cargarGrafo(); window.grafoCargado = true; }
+            if(tabId === 'tab-analisis' && !window.velasCargadas) { poblarTickers(); window.velasCargadas = true; }
+        }
+
+        // --- Peticiones a la API (Mockups lógicos hasta que ampliemos api.py) ---
+        async function actualizarTopbar() {
+            try {
+                const res = await fetch(`${API_URL}/estadisticas`);
+                const data = await res.json();
+                document.getElementById('hdr-noticias').innerText = data.noticias_totales;
+                document.getElementById('hdr-aristas').innerText = data.aristas_grafo;
+                document.getElementById('hdr-trades').innerText = data.operaciones_paper;
+            } catch(e) { console.error("Error API:", e); }
+        }
+
+        async function poblarTickers() {
+            // Requerirá un nuevo endpoint en api.py: /api/tickers
+            // Por ahora llamamos a cargarGraficoVelas() directo
+            cargarGraficoVelas();
+        }
+
+        async function cargarGraficoVelas() {
+            let chart = echarts.init(document.getElementById('chart-velas'));
+            chart.showLoading({ color: '#3B82F6', maskColor: 'rgba(11, 14, 20, 0.8)' });
+            // Lógica de ECharts aquí...
+            setTimeout(() => chart.hideLoading(), 500); // Simulación
+        }
+
+        async function cargarGrafo() {
+            // Lógica de Vis.js aquí...
+            const container = document.getElementById('chart-network');
+            const data = { nodes: [{id: 1, label: 'AAPL'}, {id: 2, label: 'MSFT'}], edges: [{from: 1, to: 2}] };
+            new vis.Network(container, data, { nodes: { shape: 'dot', font: { color: '#E2E8F0' } } });
+        }
+
+        // Init
+        actualizarTopbar();
+    </script>
+</body>
+</html>

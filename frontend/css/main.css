@@ -1,0 +1,61 @@
+/* Importar tipografía limpia para datos financieros */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap');
+
+:root {
+    /* Paleta Institucional (Modo Oscuro) */
+    --bg-dark: #0B0E14;
+    --panel-bg: #151922;
+    --border: #2B303B;
+    
+    /* Textos */
+    --text-main: #E2E8F0;
+    --text-muted: #64748B;
+    
+    /* Semántica Financiera */
+    --accent: #3B82F6;       /* Azul para controles activos */
+    --bullish: #10B981;      /* Verde para subidas/sentimiento positivo */
+    --bearish: #EF4444;      /* Rojo para bajadas/sentimiento negativo */
+    --warning: #F59E0B;      /* Naranja para alertas */
+}
+
+/* Reset y Base */
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    background-color: var(--bg-dark);
+    color: var(--text-main);
+    font-family: 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbars limpios */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg-dark); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* Clases Estructurales Reutilizables */
+.panel {
+    background-color: var(--panel-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.panel-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 0;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+}
+
+/* Utilidades de texto */
+.text-bullish { color: var(--bullish) !important; }
+.text-bearish { color: var(--bearish) !important; }

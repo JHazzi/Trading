@@ -1,0 +1,17 @@
+{
+  "intervalos_segundos": {
+    "precios": 60,
+    "noticias": 300,
+    "cerebro": 900,
+    "macro": 86400
+  },
+  "trading": {
+    "riesgo_por_operacion_pct": 2.0,
+    "horizonte_inversion_horas": 24,
+    "certeza_minima_ia_pct": 75.0
+  },
+  "ia": {
+    "batch_size": 16,
+    "umbral_similitud_eventos": 0.15
+  }
+}
