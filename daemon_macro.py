@@ -3,12 +3,18 @@ import yfinance as yf
 import signal
 import sys
 import time
+import json
 from datetime import datetime, timezone
 
 DB_PATH = "data/market_data.db"
-INTERVALO_ESPERA = 43200  # 12 horas en segundos (solo necesitamos 1 o 2 fotos al día)
+CONFIG_PATH = "config.json"
+#INTERVALO_ESPERA = 43200  # 12 horas en segundos (solo necesitamos 1 o 2 fotos al día)
 
 ejecutando = True
+
+def cargar_config():
+    with open(CONFIG_PATH, "r") as f:
+        return json.load(f)
 
 def cierre_elegante(sig, frame):
     global ejecutando
@@ -99,10 +105,12 @@ if __name__ == "__main__":
     print("[*] Arrancando Daemon Macro (Presiona Ctrl+C para detener)")
     
     while ejecutando:
+        config = cargar_config()
         ciclo_macro()
         
+        intervalo = config["intervalos_segundos"]["macro"]
         segundos = 0
-        while segundos < INTERVALO_ESPERA and ejecutando:
+        while segundos < intervalo and ejecutando:
             time.sleep(1)
             segundos += 1
             

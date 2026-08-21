@@ -1,10 +1,15 @@
 import sqlite3
 import torch
 import re
+import json
 from transformers import pipeline
 
 DB_PATH = "data/market_data.db"
-BATCH_SIZE = 16
+#BATCH_SIZE = 16
+
+def cargar_config():
+    with open(CONFIG_PATH, "r") as f:
+        return json.load(f)
 
 def limpiar_nombre_empresa(nombre_crudo: str) -> str:
     """Elimina sufijos legales para facilitar el cruce (ej. 'Apple Inc.' -> 'Apple')."""
@@ -26,6 +31,9 @@ def cargar_universo_empresas(conn):
     return universo
 
 def mineria_entidades_retroactiva():
+    config = cargar_config()
+    batch_size = config["ia"]["batch_size"]
+
     device_id = 0 if torch.cuda.is_available() else -1
     print(f"[*] Aceleración por hardware (NER): {'Activada' if device_id == 0 else 'Desactivada'}")
     print("[*] Cargando modelo NER (Named Entity Recognition)...")
@@ -58,8 +66,8 @@ def mineria_entidades_retroactiva():
     nuevas_relaciones = []
     cursor = conn.cursor()
 
-    for i in range(0, len(df_noticias), BATCH_SIZE):
-        lote = df_noticias[i : i + BATCH_SIZE]
+    for i in range(0, len(df_noticias), batch_size):
+        lote = df_noticias[i : i + batch_size]
         textos = [fila[3] if fila[3] else "Empty." for fila in lote]
         
         try:

@@ -7,14 +7,17 @@ import sys
 import os
 import joblib
 from datetime import datetime, timedelta, timezone
+import json
 
 DB_PATH = "data/market_data.db"
 MODEL_DIR = "modelos_ia"
-INTERVALO_ESPERA = 900  # 15 minutos
-HORIZONTE_DEFAULT = 24  # Horas de maduración
-COMISION_BROKER = 1   # 1% IOL
+CONFIG_PATH = "config.json"  # Agregado para que funcione cargar_config()
 
 ejecutando = True
+
+def cargar_config():
+    with open(CONFIG_PATH, "r") as f:
+        return json.load(f)
 
 def cierre_elegante(sig, frame):
     global ejecutando
@@ -36,12 +39,15 @@ def cargar_modelos():
     clasificador = joblib.load(ruta_clf)
     return regresor, clasificador
 
-def abrir_posiciones_virtuales(conn: sqlite3.Connection, regresor, clasificador):
-    """Busca eventos recientes y utiliza la IA para decidir la entrada."""
+def abrir_posiciones_virtuales(conn: sqlite3.Connection, regresor, clasificador, config: dict):
+    """Busca eventos recientes y utiliza la IA Probabilística para decidir la entrada."""
+    certeza_minima = config["trading"]["certeza_minima_ia_pct"] / 100.0
+    comision = config["trading"]["comision_broker_pct"]
+    horizonte = config["trading"]["horizonte_inversion_horas"]
+    
     cursor = conn.cursor()
     limite_tiempo = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
     
-    # Extraemos el vector de características completo (NLP + Análisis Técnico)
     query = """
         SELECT 
             c.id_noticia, c.ticker, n.timestamp, n.titulo,
@@ -63,7 +69,6 @@ def abrir_posiciones_virtuales(conn: sqlite3.Connection, regresor, clasificador)
     
     nuevas_ops = 0
     for _, row in df_candidatos.iterrows():
-        # Ensamblamos el vector de estado X
         X = pd.DataFrame([{
             'importancia': row['importancia'],
             'sentimiento': row['sentimiento'],
@@ -73,20 +78,23 @@ def abrir_posiciones_virtuales(conn: sqlite3.Connection, regresor, clasificador)
             'atr': row['atr']
         }])
         
-        # 1. El Oráculo predice el movimiento esperado (Upside)
-        rendimiento_predicho = regresor.predict(X)[0]
+        # --- 1. EXTRACCIÓN PROBABILÍSTICA (Varianza del Ensamble) ---
+        # Extraemos la predicción de cada uno de los 200 árboles individuales
+        predicciones_arboles = np.array([arbol.predict(X.values) for arbol in regresor.estimators_])
         
-        # 2. El Gestor de Riesgo predice la certeza (Probabilidad de éxito)
+        mu_t = float(np.mean(predicciones_arboles))   # Rendimiento esperado (Media)
+        sigma_t = float(np.std(predicciones_arboles)) # Caos/Incertidumbre proyectada (Desviación)
+        
         probabilidades = clasificador.predict_proba(X)[0]
         certeza = probabilidades[1] if len(probabilidades) > 1 else 0.0
         
-        # 3. Matemática de la Apuesta (Valor Esperado)
-        # Asumimos el riesgo (Downside) como proporcional a la volatilidad proyectada si falla
-        riesgo = abs(rendimiento_predicho) if rendimiento_predicho != 0 else row['atr']
+        # --- 2. CÁLCULO DEL VALOR ESPERADO (E[O]) ---
+        # El riesgo ahora es el Absoluto del Rendimiento Esperado + la Incertidumbre Matemática
+        riesgo_ajustado = abs(mu_t) + sigma_t 
+        E_O = (mu_t * certeza) - (riesgo_ajustado * (1 - certeza)) - comision
         
-        E_O = (rendimiento_predicho * certeza) - (riesgo * (1 - certeza)) - COMISION_BROKER
-        
-        if E_O > 0:
+        # Filtrado estricto: Debe tener esperanza positiva y superar nuestro umbral manual de certeza
+        if E_O > 0 and certeza >= certeza_minima:
             cursor.execute("SELECT close FROM precios WHERE ticker = ? ORDER BY timestamp DESC LIMIT 1", (row['ticker'],))
             precio_row = cursor.fetchone()
             if not precio_row: continue
@@ -96,20 +104,24 @@ def abrir_posiciones_virtuales(conn: sqlite3.Connection, regresor, clasificador)
                 INSERT INTO paper_trading (id_noticia, ticker, fecha_senal, horizonte_horas, 
                                            rendimiento_esperado_pct, certeza_pct, precio_entrada)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (row['id_noticia'], row['ticker'], row['timestamp'], HORIZONTE_DEFAULT, 
+            ''', (row['id_noticia'], row['ticker'], row['timestamp'], horizonte, 
                   round(E_O, 4), round(certeza * 100, 2), precio_entrada))
             nuevas_ops += 1
             print(f"    [!] SEÑAL IA ({row['ticker']}): {row['titulo'][:40]}...")
-            print(f"        -> Predicción: +{rendimiento_predicho:.2f}% | Certeza: {certeza*100:.1f}% | E[O]: {E_O:.2f}%")
+            margen_inf = mu_t - sigma_t
+            margen_sup = mu_t + sigma_t
+            print(f"        -> Predicción: [{margen_inf:.2f}% a {margen_sup:.2f}%] | Certeza: {certeza*100:.1f}% | E[O]: {E_O:.2f}%")
 
     conn.commit()
     return nuevas_ops
 
-def auditar_posiciones_cerradas(conn: sqlite3.Connection):
-    """Cierra operaciones maduras para retroalimentar el modelo en el futuro."""
+def auditar_posiciones_cerradas(conn: sqlite3.Connection, config: dict):
+    """Cierra operaciones maduras y calcula el Error Absoluto Medio (MAE) histórico."""
+    comision = config["trading"]["comision_broker_pct"]
     cursor = conn.cursor()
+    
     cursor.execute("""
-        SELECT id_operacion, ticker, fecha_senal, horizonte_horas, precio_entrada 
+        SELECT id_operacion, ticker, fecha_senal, horizonte_horas, precio_entrada, rendimiento_esperado_pct 
         FROM paper_trading 
         WHERE rendimiento_real_pct IS NULL
     """)
@@ -118,7 +130,7 @@ def auditar_posiciones_cerradas(conn: sqlite3.Connection):
     auditadas = 0
     ahora = datetime.now(timezone.utc)
     
-    for id_op, ticker, fecha_senal, horizonte, p_entrada in abiertas:
+    for id_op, ticker, fecha_senal, horizonte, p_entrada, r_esperado in abiertas:
         dt_senal = datetime.fromisoformat(fecha_senal.replace("Z", "+00:00"))
         dt_vencimiento = dt_senal + timedelta(hours=horizonte)
         
@@ -133,7 +145,7 @@ def auditar_posiciones_cerradas(conn: sqlite3.Connection):
             if not precio_row: continue
             
             p_salida = precio_row[0]
-            rendimiento_real = (((p_salida - p_entrada) / p_entrada) * 100) - COMISION_BROKER
+            rendimiento_real = (((p_salida - p_entrada) / p_entrada) * 100) - comision
             
             cursor.execute("""
                 UPDATE paper_trading 
@@ -142,28 +154,51 @@ def auditar_posiciones_cerradas(conn: sqlite3.Connection):
             """, (p_salida, round(rendimiento_real, 4), id_op))
             
             resultado_str = "GANANCIA" if rendimiento_real > 0 else "PÉRDIDA"
-            print(f"    [+] AUDITORÍA {ticker}: {resultado_str} de {rendimiento_real:.2f}% (Salida: ${p_salida:.2f})")
+            print(f"    [+] AUDITORÍA {ticker}: {resultado_str} de {rendimiento_real:.2f}% (Esperado: {r_esperado:.2f}%)")
             auditadas += 1
 
-    conn.commit()
-    return auditadas
+    # --- 3. CÁLCULO DEL MAE (Mean Absolute Error) ---
+    cursor.execute("""
+        SELECT abs(rendimiento_esperado_pct - rendimiento_real_pct) 
+        FROM paper_trading 
+        WHERE rendimiento_real_pct IS NOT NULL 
+        ORDER BY fecha_senal DESC LIMIT 20
+    """)
+    errores = cursor.fetchall()
+    mae = np.mean([e[0] for e in errores]) if errores else 0.0
 
-def ciclo_trading(regresor, clasificador):
+    conn.commit()
+    return auditadas, float(mae)
+
+def ciclo_trading(regresor, clasificador, config: dict):
     print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Iniciando ciclo de inferencia y trading...")
     conn = sqlite3.connect(DB_PATH)
+    reentrenar = False
     
     try:
-        abiertas = abrir_posiciones_virtuales(conn, regresor, clasificador)
-        cerradas = auditar_posiciones_cerradas(conn)
+        abiertas = abrir_posiciones_virtuales(conn, regresor, clasificador, config)
+        cerradas, mae = auditar_posiciones_cerradas(conn, config)
+        
         if abiertas > 0 or cerradas > 0:
-            print(f"[*] Resumen de ciclo: {abiertas} compras virtuales, {cerradas} operaciones auditadas.")
+            print(f"[*] Resumen: {abiertas} compras virtuales, {cerradas} auditadas. MAE Actual: {mae:.2f}%")
+            
+            # --- 4. DISPARADOR DE AUTO-HEALING ---
+            if cerradas > 0 and mae > 0.5:
+                print("\n[!!!] ALERTA: Desviación del mercado detectada (MAE > 0.5%). Iniciando Auto-Healing...")
+                # Importación dinámica para evitar bucles circulares al inicio del archivo
+                from entrenar_modelo import entrenar_cerebro_hibrido
+                entrenar_cerebro_hibrido()
+                reentrenar = True
+                
     except Exception as e:
         print(f"[!] Error en el ciclo de trading: {e}")
     finally:
         conn.close()
+        
+    return reentrenar
 
 if __name__ == "__main__":
-    print("[*] Iniciando Sistema de Paper Trading Híbrido...")
+    print("[*] Iniciando Sistema de Paper Trading Probabilístico...")
     reg, clf = cargar_modelos()
     
     if reg and clf:
@@ -171,10 +206,16 @@ if __name__ == "__main__":
         print("[*] Presiona Ctrl+C para detener")
         
         while ejecutando:
-            ciclo_trading(reg, clf)
+            config = cargar_config()
+            necesita_recarga = ciclo_trading(reg, clf, config)
             
+            if necesita_recarga:
+                print("[*] Recargando modelos sinápticos actualizados en la RAM...")
+                reg, clf = cargar_modelos()
+                
+            intervalo = config["intervalos_segundos"]["paper_trading"]
             segundos = 0
-            while segundos < INTERVALO_ESPERA and ejecutando:
+            while segundos < intervalo and ejecutando:
                 time.sleep(1)
                 segundos += 1
                 

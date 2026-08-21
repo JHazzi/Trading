@@ -1,6 +1,7 @@
 import time
 import signal
 import sys
+import json
 from datetime import datetime
 
 # Módulos del ciclo cognitivo
@@ -10,8 +11,12 @@ from extractor_relaciones import extraer_aristas_semanticas
 from procesar_sentimiento import procesar_noticias_pendientes
 from motor_inferencia import evaluar_impacto_noticias
 
-INTERVALO_ESPERA = 900  # 15 minutos en segundos
+CONFIG_PATH = "config.json"
 ejecutando = True
+
+def cargar_config():
+    with open(CONFIG_PATH, "r") as f:
+        return json.load(f)
 
 def cierre_elegante(sig, frame):
     global ejecutando
@@ -23,53 +28,31 @@ signal.signal(signal.SIGTERM, cierre_elegante)
 
 def ciclo_cognitivo():
     print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Iniciando ciclo cognitivo maestro...")
-    
-    # FASE 1: Criba de Relevancia (Zero-Shot Classification)
     try:
-        print("  -> Fase 1: Puntuación de Relevancia (Zero-Shot)...")
         procesadas = procesar_relevancia()
-    except Exception as e:
-        print(f"[!] Error en Fase 1: {e}")
-
-    # FASE 2: Clustering Temporal (Deduplicación Semántica)
-    try:
-        print("  -> Fase 2: Agrupación de Eventos y Decaimiento Temporal...")
         agrupar_ecos_financieros()
-    except Exception as e:
-        print(f"[!] Error en Fase 2: {e}")
-        
-    # FASE 3: Topología de Mercado (Extracción de Verbos para el Grafo)
-    try:
-        print("  -> Fase 3: Extracción de Relaciones Semánticas...")
         extraer_aristas_semanticas()
-    except Exception as e:
-        print(f"[!] Error en Fase 3: {e}")
-
-    # FASE 4: NLP Pipeline (Sentimiento con FinBERT)
-    try:
-        print("  -> Fase 4: Análisis de Sentimiento Direccional...")
         procesar_noticias_pendientes()
-    except Exception as e:
-        print(f"[!] Error en Fase 4: {e}")
-        
-    # FASE 5: Inferencia (Mapeo de Impacto y Correlaciones)
-    try:
-        print("  -> Fase 5: Motor de Inferencia y Cálculo MFE...")
         evaluar_impacto_noticias()
     except Exception as e:
-        print(f"[!] Error en Fase 5: {e}")
+        print(f"[!] Error en el ciclo cognitivo: {e}")
         
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Ciclo cognitivo completado exitosamente.")
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Ciclo cognitivo completado.")
 
 if __name__ == "__main__":
-    print("[*] Arrancando Sistema Nervioso Central (Daemon Cerebro) - Presiona Ctrl+C para detener")
+    print("[*] Arrancando Sistema Nervioso Central (Daemon Cerebro)")
     
     while ejecutando:
+        # 1. Leemos la configuración dinámicamente en cada ciclo
+        config = cargar_config()
+        intervalo = config["intervalos_segundos"]["cerebro"]
+        
+        # 2. Ejecutamos el ciclo
         ciclo_cognitivo()
         
+        # 3. Esperamos el tiempo dictado por el JSON
         segundos_esperados = 0
-        # Bucle de espera interrumpible
-        while segundos_esperados < INTERVALO_ESPERA and ejecutando:
+        while segundos_esperados < intervalo and ejecutando:
             time.sleep(1)
             segundos_esperados += 1
             

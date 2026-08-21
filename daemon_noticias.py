@@ -6,12 +6,17 @@ import time
 from datetime import datetime, timezone
 import yfinance as yf
 import random
+import json
 
 DB_PATH = "data/market_data.db"
-INTERVALO_ESPERA = 900  # 15 minutos en segundos
+CONFIG_PATH = "config.json"
 
 ejecutando = True
 
+
+def cargar_config():
+    with open(CONFIG_PATH, "r") as f:
+        return json.load(f)
 
 def cierre_elegante(sig, frame):
     """Manejador de señales para un graceful shutdown."""
@@ -153,10 +158,12 @@ if __name__ == "__main__":
     print("[*] Arrancando Daemon de Noticias (Presiona Ctrl+C para detener)")
 
     while ejecutando:
+        config = cargar_config()
         ciclo_ingesta()
 
+        intervalo = config["intervalos_segundos"]["noticias"]
         segundos_esperados = 0
-        while segundos_esperados < INTERVALO_ESPERA and ejecutando:
+        while segundos_esperados < intervalo and ejecutando:
             time.sleep(1)
             segundos_esperados += 1
 

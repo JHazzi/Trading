@@ -3,49 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <title>Quant Market Bot - Terminal</title>
+    
+    <!-- Librerías Externas -->
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
     <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    
+    <!-- Tipografía y CSS Modular -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/main.css">
-    <script src="js/api.js"></script>
-    <script src="js/modulos/tecnico.js"></script>
-    <script src="js/modulos/topologia.js"></script>
-    <script src="js/modulos/nlp_feed.js"></script>
-    <script src="js/app.js"></script>
-    <style>
-        :root { --bg-dark: #0B0E14; --panel-bg: #151922; --border: #2B303B; --text-main: #E2E8F0; --text-muted: #64748B; --accent: #3B82F6; }
-        body { margin: 0; background: var(--bg-dark); color: var(--text-main); font-family: 'Inter', sans-serif; display: flex; height: 100vh; overflow: hidden; }
-        
-        /* --- Sidebar --- */
-        aside { width: 220px; background: var(--panel-bg); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
-        .logo { padding: 20px; font-weight: 800; font-size: 18px; border-bottom: 1px solid var(--border); letter-spacing: -0.5px; }
-        .nav-btn { background: none; border: none; color: var(--text-muted); padding: 15px 20px; text-align: left; font-size: 14px; cursor: pointer; font-family: inherit; transition: 0.2s; border-left: 3px solid transparent; }
-        .nav-btn:hover { color: var(--text-main); background: rgba(255,255,255,0.02); }
-        .nav-btn.active { color: var(--accent); border-left-color: var(--accent); background: rgba(59, 130, 246, 0.1); font-weight: 600; }
-        
-        /* --- Contenido Principal --- */
-        main { flex-grow: 1; display: flex; flex-direction: column; background: var(--bg-dark); }
-        .topbar { height: 60px; border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 20px; gap: 30px; background: var(--panel-bg); }
-        .stat { display: flex; flex-direction: column; }
-        .stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
-        .stat-value { font-size: 15px; font-weight: 600; }
-        
-        .tab-content { display: none; padding: 20px; height: calc(100vh - 100px); box-sizing: border-box; overflow-y: auto; }
-        .tab-content.active { display: flex; flex-direction: column; gap: 20px; }
-        
-        /* --- Paneles Internos --- */
-        .panel { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 6px; padding: 15px; display: flex; flex-direction: column; }
-        .panel-header { margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid var(--border); font-size: 14px; font-weight: 600; display: flex; justify-content: space-between;}
-        
-        /* --- Controles UI --- */
-        select { background: var(--bg-dark); color: var(--text-main); border: 1px solid var(--border); padding: 5px 10px; border-radius: 4px; font-family: inherit; outline: none;}
-        
-        /* Contenedores de Gráficos */
-        .chart-container { flex-grow: 1; min-height: 400px; }
-        table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        th, td { text-align: left; padding: 10px; border-bottom: 1px solid var(--border); }
-        th { color: var(--text-muted); font-weight: 400; text-transform: uppercase; font-size: 11px; }
-    </style>
 </head>
 <body>
 
@@ -56,6 +21,7 @@
         <button class="nav-btn" onclick="switchTab('tab-noticias')">Laboratorio NLP</button>
         <button class="nav-btn" onclick="switchTab('tab-grafo')">Topología de Grafo</button>
         <button class="nav-btn" onclick="switchTab('tab-analisis')">Análisis y Trading</button>
+        <button class="nav-btn" onclick="switchTab('tab-config')">Ajustes del Motor</button>
     </aside>
 
     <main>
@@ -69,7 +35,13 @@
         <!-- TAB 1: OVERVIEW -->
         <div id="tab-overview" class="tab-content active">
             <div class="panel" style="flex-grow: 1;">
-                <div class="panel-header">Curva de Rendimiento (Equity Curve)</div>
+                <div class="panel-header">
+                    <span>Auditoría de Inferencia (Esperado vs Real)</span>
+                    <select id="overview-ticker" onchange="window.Overview.renderizar()" style="min-width: 150px;">
+                        <option value="ALL">Portafolio Global</option>
+                        <!-- JS inyectará los tickers operados aquí -->
+                    </select>
+                </div>
                 <div class="chart-container" id="chart-equity"></div>
             </div>
         </div>
@@ -91,72 +63,124 @@
         <div id="tab-grafo" class="tab-content">
             <div class="panel" style="flex-grow: 1;">
                 <div class="panel-header">Red Neuronal de Relaciones Corporativas</div>
-                <div class="chart-container" id="chart-network"></div>
+
+                <div class="chart-container" id="chart-network" style="height: 600px; min-height: 600px; flex-grow: 0;"></div>
             </div>
         </div>
 
-        <!-- TAB 4: ANÁLISIS TÉCNICO Y TRADING -->
+        <!-- TAB 4: GENERADOR DE REPORTES Y TRADING -->
         <div id="tab-analisis" class="tab-content">
-            <div class="panel" style="flex-grow: 1;">
-                <div class="panel-header">
-                    <span>Acción del Precio y Señales</span>
-                    <select id="select-ticker" onclick="poblarTickers()" onchange="cargarGraficoVelas()">
-                    </select>
+            <div class="panel" style="flex-grow: 1; display: flex; flex-direction: column;">
+                <div class="panel-header">Cerebro Híbrido: Proyección a Demanda</div>
+                
+                <!-- Controles de Inferencia -->
+                <div style="display: flex; gap: 20px; align-items: center; padding: 15px; background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 6px; margin-bottom: 20px;">
+                    <div style="min-width: 200px;">
+                        <label style="display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 5px;">Activo a Evaluar</label>
+                        <select id="select-ticker" onchange="cargarGraficoVelas()" style="width: 100%;">
+                            <!-- JS poblará esto -->
+                        </select>
+                    </div>
+                    
+                    <div style="flex-grow: 1;">
+                        <label style="display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 5px;">
+                            Horizonte de Proyección: <strong id="lbl-horizonte" style="color: var(--accent);">7 Días</strong>
+                        </label>
+                        <input type="range" id="slider-tiempo" min="1" max="365" value="7" style="width: 100%; cursor: pointer;" oninput="actualizarLabelTiempo(this.value)">
+                    </div>
+                    
+                    <div>
+                        <button onclick="solicitarReporte()" style="background: var(--accent); color: white; border: none; padding: 12px 24px; border-radius: 4px; font-weight: 600; cursor: pointer;">Generar Reporte</button>
+                    </div>
                 </div>
-                <div class="chart-container" id="chart-velas"></div>
+
+                <div id="tarjeta-reporte" style="display: none; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 20px; padding: 20px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-dark);">
+                    <div>
+                        <div style="font-size: 12px; color: var(--text-muted); text-transform: uppercase;">Rentabilidad Esperada (Rango)</div>
+                        <div id="rep-rendimiento" style="font-size: 24px; font-weight: 800; margin-top: 5px;">--</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 12px; color: var(--text-muted); text-transform: uppercase;">Nivel de Certeza</div>
+                        <div id="rep-certeza" style="font-size: 24px; font-weight: 800; margin-top: 5px;">--</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 12px; color: var(--text-muted); text-transform: uppercase;">Tensión Psicológica (Precio)</div>
+                        <div id="rep-tension" style="font-size: 16px; font-weight: 600; margin-top: 5px; color: var(--warning);">--</div>
+                    </div>
+                </div>
+                <div id="caja-cristal" style="display: none; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; padding: 15px; border: 1px dashed var(--border); border-radius: 6px; background: rgba(59, 130, 246, 0.05);">
+                    <!-- JS inyectará los parámetros aquí -->
+                </div>
+                <div id="contenedor-proyeccion" style="display: none; flex-direction: column; margin-bottom: 20px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel-bg); padding: 15px;">
+                    <div style="font-size: 12px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 10px; font-weight: 600;">
+                        Proyección Matemática: Margen de Ganancia vs Caos (Certeza)
+                    </div>
+                    <div class="chart-container" id="chart-proyeccion" style="height: 300px; min-height: 300px;"></div>
+                </div>
+
+                <!-- Gráfico de Acción del Precio -->
+                <div class="panel-header" style="border-top: 1px solid var(--border); padding-top: 20px;">Contexto Histórico</div>
+                <div class="chart-container" id="chart-velas" style="min-height: 350px;"></div>
+            </div>
+        </div>
+        <!-- TAB 5: CONFIGURACIÓN -->
+        <div id="tab-config" class="tab-content">
+            <div class="panel" style="max-width: 800px; margin: 0 auto; width: 100%;">
+                <div class="panel-header">Parámetros del Motor (config.json)</div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
+                    <!-- Columna 1 -->
+                    <div>
+                        <h4 style="color: var(--accent); margin-bottom: 15px;">Intervalos de Ejecución (seg)</h4>
+                        <div style="margin-bottom: 10px;">
+                            <label style="font-size: 12px; color: var(--text-muted);">Daemon Precios</label>
+                            <input type="number" id="cfg-int-precios" style="width: 100%; margin-top: 5px;">
+                        </div>
+                        <div style="margin-bottom: 10px;">
+                            <label style="font-size: 12px; color: var(--text-muted);">Daemon Noticias</label>
+                            <input type="number" id="cfg-int-noticias" style="width: 100%; margin-top: 5px;">
+                        </div>
+                        <div style="margin-bottom: 10px;">
+                            <label style="font-size: 12px; color: var(--text-muted);">Orquestador (Cerebro)</label>
+                            <input type="number" id="cfg-int-cerebro" style="width: 100%; margin-top: 5px;">
+                        </div>
+                    </div>
+
+                    <!-- Columna 2 -->
+                    <div>
+                        <h4 style="color: var(--accent); margin-bottom: 15px;">Modelos e IA</h4>
+                        <div style="margin-bottom: 10px;">
+                            <label style="font-size: 12px; color: var(--text-muted);">Certeza Mínima de Operación (%)</label>
+                            <input type="number" id="cfg-ia-certeza" style="width: 100%; margin-top: 5px;" step="0.1">
+                        </div>
+                        <div style="margin-bottom: 10px;">
+                            <label style="font-size: 12px; color: var(--text-muted);">Umbral Similitud Eventos</label>
+                            <input type="number" id="cfg-ia-similitud" style="width: 100%; margin-top: 5px;" step="0.01">
+                        </div>
+                        
+                        <h4 style="color: var(--accent); margin-top: 25px; margin-bottom: 15px;">Gestión de Riesgo</h4>
+                        <div style="margin-bottom: 10px;">
+                            <label style="font-size: 12px; color: var(--text-muted);">Riesgo por Operación (%)</label>
+                            <input type="number" id="cfg-risk-pct" style="width: 100%; margin-top: 5px;" step="0.1">
+                        </div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 30px; text-align: right; border-top: 1px solid var(--border); padding-top: 20px;">
+                    <span id="cfg-msg" style="color: var(--bullish); font-size: 13px; margin-right: 15px; display: none;">Guardado exitosamente.</span>
+                    <button onclick="window.ConfigMotor.guardarConfig()" style="background: var(--accent); color: white; border: none; padding: 10px 20px; border-radius: 4px; font-weight: 600; cursor: pointer; font-family: inherit;">Guardar Configuración</button>
+                </div>
             </div>
         </div>
     </main>
 
-    <script>
-        const API_URL = "http://localhost:8000/api";
-
-        // Lógica de Pestañas
-        function switchTab(tabId) {
-            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-            
-            document.getElementById(tabId).classList.add('active');
-            event.currentTarget.classList.add('active');
-
-            // Renderizar gráficos si la pestaña lo requiere
-            if(tabId === 'tab-grafo' && !window.grafoCargado) { cargarGrafo(); window.grafoCargado = true; }
-            if(tabId === 'tab-analisis' && !window.velasCargadas) { poblarTickers(); window.velasCargadas = true; }
-        }
-
-        // --- Peticiones a la API (Mockups lógicos hasta que ampliemos api.py) ---
-        async function actualizarTopbar() {
-            try {
-                const res = await fetch(`${API_URL}/estadisticas`);
-                const data = await res.json();
-                document.getElementById('hdr-noticias').innerText = data.noticias_totales;
-                document.getElementById('hdr-aristas').innerText = data.aristas_grafo;
-                document.getElementById('hdr-trades').innerText = data.operaciones_paper;
-            } catch(e) { console.error("Error API:", e); }
-        }
-
-        async function poblarTickers() {
-            // Requerirá un nuevo endpoint en api.py: /api/tickers
-            // Por ahora llamamos a cargarGraficoVelas() directo
-            cargarGraficoVelas();
-        }
-
-        async function cargarGraficoVelas() {
-            let chart = echarts.init(document.getElementById('chart-velas'));
-            chart.showLoading({ color: '#3B82F6', maskColor: 'rgba(11, 14, 20, 0.8)' });
-            // Lógica de ECharts aquí...
-            setTimeout(() => chart.hideLoading(), 500); // Simulación
-        }
-
-        async function cargarGrafo() {
-            // Lógica de Vis.js aquí...
-            const container = document.getElementById('chart-network');
-            const data = { nodes: [{id: 1, label: 'AAPL'}, {id: 2, label: 'MSFT'}], edges: [{from: 1, to: 2}] };
-            new vis.Network(container, data, { nodes: { shape: 'dot', font: { color: '#E2E8F0' } } });
-        }
-
-        // Init
-        actualizarTopbar();
-    </script>
+    <!-- Inyección de Módulos Lógicos (Al final para no bloquear el renderizado visual) -->
+    <script src="js/api.js?v=3.0"></script>
+    <script src="js/modulos/overview.js?v=3.0"></script>
+    <script src="js/modulos/tecnico.js?v=3.0"></script>
+    <script src="js/modulos/topologia.js?v=3.0"></script>
+    <script src="js/modulos/nlp_feed.js?v=3.0"></script>
+    <script src="js/app.js?v=3.0"></script>
+    <script src="js/modulos/config.js?v=3.0"></script>
 </body>
 </html>

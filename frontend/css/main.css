@@ -18,7 +18,7 @@
     --warning: #F59E0B;      /* Naranja para alertas */
 }
 
-/* Reset y Base */
+/* --- Reset y Base --- */
 * { box-sizing: border-box; }
 
 body {
@@ -27,35 +27,134 @@ body {
     color: var(--text-main);
     font-family: 'Inter', sans-serif;
     -webkit-font-smoothing: antialiased;
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
 }
 
-/* Scrollbars limpios */
+/* --- Scrollbars limpios --- */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: var(--bg-dark); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
-/* Clases Estructurales Reutilizables */
-.panel {
-    background-color: var(--panel-bg);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 20px;
+/* --- Sidebar --- */
+aside { 
+    width: 220px; 
+    background: var(--panel-bg); 
+    border-right: 1px solid var(--border); 
+    display: flex; 
+    flex-direction: column; 
+}
+.logo { 
+    padding: 20px; 
+    font-weight: 800; 
+    font-size: 18px; 
+    border-bottom: 1px solid var(--border); 
+    letter-spacing: -0.5px; 
+}
+.nav-btn { 
+    background: none; 
+    border: none; 
+    color: var(--text-muted); 
+    padding: 15px 20px; 
+    text-align: left; 
+    font-size: 14px; 
+    cursor: pointer; 
+    font-family: inherit; 
+    transition: 0.2s; 
+    border-left: 3px solid transparent; 
+}
+.nav-btn:hover { 
+    color: var(--text-main); 
+    background: rgba(255,255,255,0.02); 
+}
+.nav-btn.active { 
+    color: var(--accent); 
+    border-left-color: var(--accent); 
+    background: rgba(59, 130, 246, 0.1); 
+    font-weight: 600; 
+}
+
+/* --- Contenido Principal --- */
+main { 
+    flex-grow: 1; 
+    display: flex; 
+    flex-direction: column; 
+    background: var(--bg-dark); 
+}
+.topbar { 
+    height: 60px; 
+    border-bottom: 1px solid var(--border); 
+    display: flex; 
+    align-items: center; 
+    padding: 0 20px; 
+    gap: 30px; 
+    background: var(--panel-bg); 
+}
+.stat { display: flex; flex-direction: column; }
+.stat-label { 
+    font-size: 11px; 
+    color: var(--text-muted); 
+    text-transform: uppercase; 
+    letter-spacing: 0.5px; 
+}
+.stat-value { font-size: 15px; font-weight: 600; }
+
+/* --- Sistema de Pestañas --- */
+.tab-content { 
+    display: none; /* Oculta todas por defecto */
+    padding: 20px; 
+    height: calc(100vh - 60px); 
+    box-sizing: border-box; 
+    overflow-y: auto; 
+}
+.tab-content.active { 
+    display: flex; /* Muestra solo la activa */
+    flex-direction: column; 
+    gap: 20px; 
+}
+
+/* --- Paneles Internos y UI --- */
+.panel { 
+    background: var(--panel-bg); 
+    border: 1px solid var(--border); 
+    border-radius: 6px; 
+    padding: 15px; 
+    display: flex; 
+    flex-direction: column; 
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
-
-.panel-title {
-    font-size: 14px;
-    font-weight: 600;
+.panel-header { 
+    margin-bottom: 15px; 
+    padding-bottom: 10px; 
+    border-bottom: 1px solid var(--border); 
+    font-size: 14px; 
+    font-weight: 600; 
+    display: flex; 
+    justify-content: space-between;
+    align-items: center;
     color: var(--text-muted);
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-top: 0;
-    margin-bottom: 15px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid var(--border);
 }
 
-/* Utilidades de texto */
+select { 
+    background: var(--bg-dark); 
+    color: var(--text-main); 
+    border: 1px solid var(--border); 
+    padding: 5px 10px; 
+    border-radius: 4px; 
+    font-family: inherit; 
+    outline: none;
+}
+
+.chart-container { flex-grow: 1; min-height: 400px; }
+
+/* --- Tablas (Para NLP Feed) --- */
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 10px; border-bottom: 1px solid var(--border); }
+th { color: var(--text-muted); font-weight: 400; text-transform: uppercase; font-size: 11px; }
+
+/* --- Utilidades de texto --- */
 .text-bullish { color: var(--bullish) !important; }
 .text-bearish { color: var(--bearish) !important; }

@@ -21,13 +21,13 @@ const Topologia = {
             const options = {
                 nodes: {
                     shape: 'dot',
-                    size: 16,
+                    size: 14,
                     font: { 
                         color: '#E2E8F0', 
-                        size: 12, 
+                        size: 11, 
                         face: 'Inter',
-                        strokeWidth: 2,
-                        strokeColor: '#0B0E14' // Contorno oscuro para que el texto resalte
+                        strokeWidth: 3,
+                        strokeColor: '#0B0E14' 
                     },
                     borderWidth: 2,
                     color: {
@@ -37,18 +37,19 @@ const Topologia = {
                     }
                 },
                 edges: {
-                    width: 1.5,
+                    width: 1.2,
                     smooth: { type: 'continuous' },
-                    color: { inherit: false } // Usa el color rojo/verde que manda la API
+                    // LA CLAVE: Opacidad al 40% para que no colapsen visualmente
+                    color: { inherit: false, opacity: 0.4 } 
                 },
                 physics: {
                     forceAtlas2Based: { 
-                        gravitationalConstant: -70, 
-                        centralGravity: 0.01, 
-                        springLength: 120, 
-                        springConstant: 0.08 
+                        gravitationalConstant: -150, // Más repulsión para separar el cúmulo
+                        centralGravity: 0.005, 
+                        springLength: 200, // Cuerdas más largas entre empresas
+                        springConstant: 0.05 
                     },
-                    maxVelocity: 50,
+                    maxVelocity: 40,
                     solver: 'forceAtlas2Based',
                     timestep: 0.35,
                     stabilization: { iterations: 150 }
@@ -62,6 +63,9 @@ const Topologia = {
 
             // Inyectamos el lienzo interactivo
             this.networkInstancia = new vis.Network(contenedor, data, options);
+            this.networkInstancia.once("stabilizationIterationsDone", () => {
+                this.networkInstancia.setOptions({ physics: false });
+            });
 
         } catch (error) {
             console.error("Error al graficar topología:", error);

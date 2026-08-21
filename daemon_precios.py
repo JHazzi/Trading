@@ -5,12 +5,18 @@ import sys
 import time
 import random
 import pandas as pd
+import json
 from datetime import datetime, timedelta, timezone
 
 DB_PATH = "data/market_data.db"
-INTERVALO_ESPERA = 30  # 5 minutos en segundos
+CONFIG_PATH = "config.json"
+#INTERVALO_ESPERA = 30  # 5 minutos en segundos
 
 ejecutando = True
+
+def cargar_config():
+    with open(CONFIG_PATH, "r") as f:
+        return json.load(f)
 
 def cierre_elegante(sig, frame):
     """Garantiza un Cierre Elegante sin corromper SQLite."""
@@ -118,10 +124,12 @@ if __name__ == "__main__":
     print("[*] Arrancando Daemon de Precios (Presiona Ctrl+C para detener)")
     
     while ejecutando:
+        config = cargar_config()
         ciclo_ingesta_precios()
         
+        intervalo = config["intervalos_segundos"]["precios"]
         segundos_esperados = 0
-        while segundos_esperados < INTERVALO_ESPERA and ejecutando:
+        while segundos_esperados < intervalo and ejecutando:
             time.sleep(1)
             segundos_esperados += 1
             

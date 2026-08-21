@@ -1,9 +1,15 @@
 import sqlite3
 import torch
+import json
 from transformers import pipeline
 
 DB_PATH = "data/market_data.db"
-BATCH_SIZE = 16  # Ajustable según tu VRAM libre
+CONFIG_PATH = "config.json"
+#BATCH_SIZE = 16  # Ajustable según tu VRAM libre
+
+def cargar_config():
+    with open(CONFIG_PATH, "r") as f:
+        return json.load(f)
 
 # 1. Configuración de Aceleración de Hardware
 device_id = 0 if torch.cuda.is_available() else -1
@@ -19,6 +25,8 @@ clasificador = pipeline(
 )
 
 def procesar_relevancia():
+    config = cargar_config()
+    batch_size = config["ia"]["batch_size"]
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
@@ -40,8 +48,8 @@ def procesar_relevancia():
     actualizaciones = []
     
     # Procesamiento en Lotes (Batches) para saturar los Tensor Cores de la GPU
-    for i in range(0, len(filas), BATCH_SIZE):
-        batch = filas[i : i + BATCH_SIZE]
+    for i in range(0, len(filas), batch_size):
+        batch = filas[i : i + batch_size]
         ids = [f[0] for f in batch]
         
         # Fusionamos título y resumen (con un fallback seguro si resumen es None)

@@ -60,6 +60,10 @@ const API = {
     getTickers: async () => {
         return await API.fetchJSON("/tickers");
     },
+    // Obtener reporte proyectado a demanda
+    getReporte: async (ticker, dias) => {
+        return await API.fetchJSON(`/reporte/${ticker}?dias=${dias}`);
+    },
 };
 
 // Exponer el objeto globalmente para que los módulos lo puedan usar

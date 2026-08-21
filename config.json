@@ -3,15 +3,24 @@
     "precios": 60,
     "noticias": 300,
     "cerebro": 900,
-    "macro": 86400
+    "macro": 86400,
+    "paper_trading": 900
   },
   "trading": {
     "riesgo_por_operacion_pct": 2.0,
-    "horizonte_inversion_horas": 24,
-    "certeza_minima_ia_pct": 75.0
+    "horizonte_inversion_horas": 0.5,
+    "certeza_minima_ia_pct": 75.0,
+    "comision_broker_pct": 1.0
   },
   "ia": {
     "batch_size": 16,
     "umbral_similitud_eventos": 0.15
+  },
+  "taxonomia_relaciones": {
+    "merger, acquisition, or buyout": 0.9,
+    "partnership, collaboration, or supply agreement": 0.7,
+    "generic mention or industry trend": 0.1,  
+    "market competition or rivalry": -0.4,
+    "lawsuit, legal dispute, or patent conflict": -0.8
   }
 }

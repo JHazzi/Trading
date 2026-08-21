@@ -1,11 +1,16 @@
 import sqlite3
 import torch
+import json
 import torch.nn.functional as F
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 DB_PATH = "data/market_data.db"
 MODEL_NAME = "ProsusAI/finbert"
-BATCH_SIZE = 32
+CONFIG_PATH = "config.json"
+
+def cargar_config():
+    with open(CONFIG_PATH, "r") as f:
+        return json.load(f)
 
 # 1. Configuración de Hardware (Aprovecha tu RTX 4060)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -27,6 +32,8 @@ LABELS = model.config.id2label
 
 
 def procesar_noticias_pendientes():
+    config = cargar_config()
+    batch_size = config["ia"]["batch_size"]
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
@@ -44,8 +51,8 @@ def procesar_noticias_pendientes():
     # Procesamiento por lotes (Batch processing)
     actualizaciones = []
 
-    for i in range(0, len(filas), BATCH_SIZE):
-        batch = filas[i : i + BATCH_SIZE]
+    for i in range(0, len(filas), batch_size):
+        batch = filas[i : i + batch_size]
         ids = [item[0] for item in batch]
         titulos = [item[1] for item in batch]
 
